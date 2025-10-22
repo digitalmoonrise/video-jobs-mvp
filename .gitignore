@@ -1,0 +1,14 @@
+node_modules/
+dist/
+tmp/
+renders/
+*.log
+.env
+.DS_Store
+*.mp4
+*.mp3
+*.wav
+*.png
+*.jpg
+*.ass
+*.txt
