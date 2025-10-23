@@ -34,7 +34,7 @@ app.post('/render', async (req, res) => {
       brand: req.body.brand,
       locale: req.body.locale || 'en-US',
       duration_s: req.body.duration_s || config.defaults.duration_s,
-      engine: req.body.engine || 'template', // Default to template for MVP
+      engine: req.body.engine || 'veo3', // Default to Veo 3.1 (Google Gemini)
       scenes: req.body.scenes || config.defaults.scenes,
     };
 

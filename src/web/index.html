@@ -371,6 +371,14 @@
         </div>
       </div>
 
+      <div class="form-group">
+        <label for="engine">Video Engine</label>
+        <select id="engine">
+          <option value="veo3" selected>Veo 3.1 (Google Gemini - Best Quality)</option>
+          <option value="template">Template (Fast - Gradient Background)</option>
+        </select>
+      </div>
+
       <button type="submit" id="submitBtn">Generate Video</button>
     </form>
 
@@ -452,7 +460,7 @@
             tone: document.getElementById('tone').value,
           },
           duration_s: parseInt(document.getElementById('duration').value),
-          engine: 'template',
+          engine: document.getElementById('engine').value,
           scenes: 3,
         };
 
