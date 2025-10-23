@@ -1,7 +1,7 @@
 // Veo 3.1 generator adapter using Google Gemini API
 
 import { GoogleGenAI } from '@google/genai';
-import { stat } from 'fs/promises';
+import { stat, writeFile } from 'fs/promises';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -62,12 +62,11 @@ export async function generateVeoScene(
     logger.info('Starting Veo 3.1 generation', { prompt });
 
     // Kick off video generation (long-running operation)
+    // Note: Aspect ratio is specified in the prompt text since the API doesn't
+    // have a dedicated config parameter for it yet
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
       prompt,
-      config: {
-        aspectRatio: '9:16', // Explicitly request vertical format
-      },
     });
 
     logger.info('Veo operation started', { operationName: operation.name });
@@ -104,7 +103,28 @@ export async function generateVeoScene(
 
     logger.info('Downloading Veo video', { fileRef, outPath });
 
-    await ai.files.download({ file: fileRef, downloadPath: outPath });
+    // Manually download the file using fetch
+    const downloadUrl = fileRef.uri;
+    if (!downloadUrl) {
+      throw new Error('No download URL provided in video response');
+    }
+    logger.info('Fetching video from URL', { downloadUrl });
+
+    const response = await fetch(downloadUrl, {
+      headers: {
+        'x-goog-api-key': config.gemini.apiKey || '',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await writeFile(outPath, buffer);
+    logger.info('Video downloaded successfully', { size: buffer.length, outPath });
 
     // Validate the downloaded file before proceeding
     await validateVideoFile(outPath);
