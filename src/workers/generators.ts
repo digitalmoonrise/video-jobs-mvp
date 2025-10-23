@@ -7,6 +7,7 @@ import path from 'path';
 import { config } from '../lib/config.js';
 import { createLogger } from '../lib/logger.js';
 import { buildScenePrompt } from '../lib/prompts/scene.js';
+import { generateVeoScene } from './gen_veo3.js';
 import type { Scene } from '../lib/types/index.js';
 
 const execAsync = promisify(exec);
@@ -71,14 +72,18 @@ class Sora2Adapter implements GeneratorAdapter {
   }
 }
 
-// Veo3 adapter (placeholder - requires actual API)
+// Veo3 adapter (Google Gemini API)
 class Veo3Adapter implements GeneratorAdapter {
   async generate(scene: Scene, renderId: string, sceneIndex: number): Promise<string> {
-    logger.warn('Veo3 adapter not implemented, falling back to template', { renderId, sceneIndex });
-
-    // For now, fall back to template
-    const template = new TemplateAdapter();
-    return template.generate(scene, renderId, sceneIndex);
+    try {
+      logger.info('Using Veo 3.1 (Google Gemini) for scene generation', { renderId, sceneIndex });
+      return await generateVeoScene(scene, renderId, sceneIndex);
+    } catch (error) {
+      logger.error('Veo3 generation failed, falling back to template', { renderId, sceneIndex, error });
+      // Fall back to template on error
+      const template = new TemplateAdapter();
+      return template.generate(scene, renderId, sceneIndex);
+    }
   }
 }
 

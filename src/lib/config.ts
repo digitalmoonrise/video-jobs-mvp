@@ -9,8 +9,9 @@ export const config = {
   sora2: {
     apiKey: process.env.SORA2_API_KEY || '',
   },
-  veo3: {
-    apiKey: process.env.VEO3_API_KEY || '',
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || '',
+    apiBase: process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta',
   },
   tts: {
     apiKey: process.env.TTS_API_KEY || '',
