@@ -20,12 +20,21 @@ export async function concatenateScenes(
   const outputPath = path.join(config.paths.tmp, `${renderId}_concat.mp4`);
 
   try {
-    // Normalize all scenes to same fps and resolution
+    // Skip scene0 - only use Veo3-generated scenes (scene1 and scene2)
+    const scenesToUse = sceneFiles.slice(1); // Skip first scene (scene0)
+    logger.info('Skipping scene0, using only Veo3 scenes', {
+      renderId,
+      originalCount: sceneFiles.length,
+      usedCount: scenesToUse.length
+    });
+
+    // Normalize all scenes to same fps and resolution, PRESERVING AUDIO
     const normalizedFiles: string[] = [];
 
-    for (let i = 0; i < sceneFiles.length; i++) {
-      const normalized = path.join(config.paths.tmp, `${renderId}_scene${i}_norm.mp4`);
-      const cmd = `ffmpeg -y -i "${sceneFiles[i]}" -r 30 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "${normalized}"`;
+    for (let i = 0; i < scenesToUse.length; i++) {
+      const normalized = path.join(config.paths.tmp, `${renderId}_scene${i+1}_norm.mp4`);
+      // IMPORTANT: Added -c:a aac to preserve audio from Veo3 videos
+      const cmd = `ffmpeg -y -i "${scenesToUse[i]}" -r 30 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -c:a aac -b:a 192k -preset veryfast -crf 23 -pix_fmt yuv420p "${normalized}"`;
       await execAsync(cmd);
       normalizedFiles.push(normalized);
     }
@@ -82,10 +91,13 @@ async function generateSubtitles(
 ): Promise<string> {
   const assPath = path.join(config.paths.tmp, `${renderId}_overlays.ass`);
 
-  const duration = script.estimated_duration_s;
-  const segmentDuration = Math.floor(duration / 3);
+  // Since we're using only 2 scenes (skipping scene0), adjust timing
+  // We'll use a shorter estimated duration based on 2 scenes instead of 3
+  const actualDuration = Math.floor(script.estimated_duration_s * (2 / 3));
+  const segmentDuration = Math.floor(actualDuration / 2);
 
   // Generate ASS subtitle content
+  // Skip scene0's text, show only scene1 and scene2 text
   const assContent = `[Script Info]
 PlayResX: 1080
 PlayResY: 1920
@@ -94,9 +106,8 @@ PlayResY: 1920
 Style: LT,Inter,42,&H00FFFFFF,&H00000000,&HAA000000,&HAA000000,0,0,0,0,100,100,0,0,3,2,2,2,10,10,20,1
 
 [Events]
-Dialogue: 0,0:00:00.00,0:00:0${segmentDuration}.00,LT,,0,0,0,,${script.on_screen_text[0] || script.hook}
-Dialogue: 0,0:00:0${segmentDuration}.00,0:00:${segmentDuration * 2}.00,LT,,0,0,0,,${script.on_screen_text[1] || script.beats[1]}
-Dialogue: 0,0:00:${segmentDuration * 2}.00,0:00:${duration}.00,LT,,0,0,0,,${script.on_screen_text[2] || script.cta}
+Dialogue: 0,0:00:00.00,0:00:0${segmentDuration}.00,LT,,0,0,0,,${script.on_screen_text[1] || script.beats[1]}
+Dialogue: 0,0:00:0${segmentDuration}.00,0:00:${actualDuration}.00,LT,,0,0,0,,${script.on_screen_text[2] || script.cta}
 `;
 
   await writeFile(assPath, assContent);
@@ -119,9 +130,10 @@ export async function appendEndCard(
     // Generate end card image
     const endCardPath = await generateEndCard(brand, ctaUrl, renderId);
 
-    // Create 2-second video from end card image
+    // Create 2-second video from end card image with silent audio track
+    // (so it matches the audio streams from the main video during concatenation)
     const endCardVideo = path.join(config.paths.tmp, `${renderId}_endcard.mp4`);
-    const createEndCardCmd = `ffmpeg -y -loop 1 -t 2 -i "${endCardPath}" -r 30 -vf "scale=1080:1920" -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "${endCardVideo}"`;
+    const createEndCardCmd = `ffmpeg -y -loop 1 -t 2 -i "${endCardPath}" -f lavfi -t 2 -i anullsrc=r=48000:cl=stereo -r 30 -vf "scale=1080:1920" -c:v libx264 -c:a aac -b:a 192k -preset veryfast -crf 23 -pix_fmt yuv420p -shortest "${endCardVideo}"`;
     await execAsync(createEndCardCmd);
 
     // Create concat file with absolute paths
