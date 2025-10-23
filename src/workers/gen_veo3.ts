@@ -1,10 +1,15 @@
 // Veo 3.1 generator adapter using Google Gemini API
 
 import { GoogleGenAI } from '@google/genai';
+import { stat } from 'fs/promises';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import path from 'path';
 import { config } from '../lib/config.js';
 import { createLogger } from '../lib/logger.js';
 import type { Scene } from '../lib/types/index.js';
+
+const execAsync = promisify(exec);
 
 const logger = createLogger('veo3');
 
@@ -18,6 +23,25 @@ function getGeminiClient(): GoogleGenAI {
     ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
   }
   return ai;
+}
+
+async function validateVideoFile(filePath: string): Promise<void> {
+  // Check file exists and has content
+  const stats = await stat(filePath);
+  if (stats.size < 1000) {
+    throw new Error(`Video file too small (${stats.size} bytes), likely corrupted`);
+  }
+
+  // Wait a bit to ensure file system has flushed writes
+  await new Promise(r => setTimeout(r, 500));
+
+  // Validate with ffprobe that the file is a valid MP4
+  try {
+    await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`);
+    logger.info('Video file validated successfully', { filePath, size: stats.size });
+  } catch (error) {
+    throw new Error(`Video file validation failed: ${error}`);
+  }
 }
 
 export async function generateVeoScene(
@@ -41,6 +65,9 @@ export async function generateVeoScene(
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-generate-preview',
       prompt,
+      config: {
+        aspectRatio: '9:16', // Explicitly request vertical format
+      },
     });
 
     logger.info('Veo operation started', { operationName: operation.name });
@@ -78,6 +105,9 @@ export async function generateVeoScene(
     logger.info('Downloading Veo video', { fileRef, outPath });
 
     await ai.files.download({ file: fileRef, downloadPath: outPath });
+
+    // Validate the downloaded file before proceeding
+    await validateVideoFile(outPath);
 
     const duration = Date.now() - startTime;
     logger.info('Veo scene generated successfully', {
