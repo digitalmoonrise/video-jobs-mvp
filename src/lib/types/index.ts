@@ -6,8 +6,12 @@ export interface RenderRequest {
   job_description: string;
   brand: BrandConfig;
   locale?: string;
+  /** Number of scenes to generate (1-3). Determines video length (~7s per scene). Default: 1 */
+  scene_count?: number;
+  /** @deprecated Use scene_count instead. Kept for backwards compatibility. */
   duration_s?: number;
   engine?: 'sora2' | 'veo3' | 'template';
+  /** @deprecated Use scene_count instead. Kept for backwards compatibility. */
   scenes?: number;
 }
 

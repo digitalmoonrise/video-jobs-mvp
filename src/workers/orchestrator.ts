@@ -49,18 +49,23 @@ export async function processRenderJob(renderId: string): Promise<void> {
     // Step 2: Generate script and shot plan
     logger.info('Step 2: Generating script', { renderId });
     const scriptStart = Date.now();
+    const scene_count = job.request.scene_count || 1;
+    const duration_s = job.request.duration_s || config.defaults.duration_s;
+
     const script = await generateScript(
       brief,
       job.request.brand.tone,
-      job.request.duration_s || config.defaults.duration_s
+      duration_s,
+      scene_count
     );
     job.script = script;
 
     const shotPlan = await generateShotPlan(
       script,
       brief,
-      job.request.duration_s || config.defaults.duration_s,
-      job.request.brand.tone
+      duration_s,
+      job.request.brand.tone,
+      scene_count
     );
     job.shot_plan = shotPlan;
     job.debug.steps.push({

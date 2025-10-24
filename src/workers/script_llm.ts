@@ -15,18 +15,19 @@ const openai = new OpenAI({
 export async function generateScript(
   brief: StructuredBrief,
   tone: string,
-  duration_s: number
+  duration_s: number,
+  scene_count: number
 ): Promise<VideoScript> {
   const startTime = Date.now();
 
   try {
-    logger.info('Generating video script', { tone, duration_s });
+    logger.info('Generating video script', { tone, duration_s, scene_count });
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: SCRIPT_SYSTEM_PROMPT },
-        { role: 'user', content: buildScriptPrompt(brief, tone, duration_s) },
+        { role: 'user', content: buildScriptPrompt(brief, tone, duration_s, scene_count) },
       ],
       temperature: 0.8,
       response_format: { type: 'json_object' },
@@ -40,12 +41,12 @@ export async function generateScript(
     const script: VideoScript = JSON.parse(content);
 
     // Validate required fields
-    if (!script.hook || !script.beats || script.beats.length !== 3) {
-      throw new Error('Invalid script structure');
+    if (!script.hook || !script.beats || script.beats.length !== scene_count) {
+      throw new Error(`Invalid script structure - expected ${scene_count} beats, got ${script.beats?.length || 0}`);
     }
 
     const duration = Date.now() - startTime;
-    logger.info('Script generated successfully', { duration_ms: duration });
+    logger.info('Script generated successfully', { duration_ms: duration, beat_count: script.beats.length });
 
     return script;
   } catch (error) {
@@ -58,18 +59,19 @@ export async function generateShotPlan(
   script: VideoScript,
   brief: StructuredBrief,
   duration_s: number,
-  tone: string
+  tone: string,
+  scene_count: number
 ): Promise<ShotPlan> {
   const startTime = Date.now();
 
   try {
-    logger.info('Generating shot plan with LLM', { tone, duration_s });
+    logger.info('Generating shot plan with LLM', { tone, duration_s, scene_count });
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: SHOT_PLAN_SYSTEM_PROMPT },
-        { role: 'user', content: buildShotPlanPrompt(script, brief, duration_s, tone) },
+        { role: 'user', content: buildShotPlanPrompt(script, brief, duration_s, tone, scene_count) },
       ],
       temperature: 0.85,
       response_format: { type: 'json_object' },
@@ -83,27 +85,28 @@ export async function generateShotPlan(
     const shotPlan: ShotPlan = JSON.parse(content);
 
     // Validate required fields
-    if (!shotPlan.scenes || shotPlan.scenes.length !== 2) {
-      throw new Error('Invalid shot plan structure - expected 2 scenes');
+    if (!shotPlan.scenes || shotPlan.scenes.length !== scene_count) {
+      throw new Error(`Invalid shot plan structure - expected ${scene_count} scenes, got ${shotPlan.scenes?.length || 0}`);
     }
 
     const duration = Date.now() - startTime;
-    logger.info('Shot plan generated successfully', { duration_ms: duration });
+    logger.info('Shot plan generated successfully', { duration_ms: duration, scene_count: shotPlan.scenes.length });
 
     return shotPlan;
   } catch (error) {
     logger.error('Failed to generate shot plan, falling back to hardcoded version', { error });
     // Fallback to hardcoded shot plan on error
-    return makeShotPlanFallback(script, duration_s, tone);
+    return makeShotPlanFallback(script, duration_s, tone, scene_count);
   }
 }
 
-export function makeShotPlanFallback(script: VideoScript, duration_s: number, tone: string): ShotPlan {
-  logger.info('Creating shot plan', { duration_s, tone });
+export function makeShotPlanFallback(script: VideoScript, duration_s: number, tone: string, scene_count: number): ShotPlan {
+  logger.info('Creating fallback shot plan', { duration_s, tone, scene_count });
 
-  const sceneDuration = Math.floor(duration_s / 3);
+  const sceneDuration = Math.floor(duration_s / scene_count);
 
-  const scenes: Scene[] = script.beats.map((beat, index) => ({
+  // Only generate scenes for the first scene_count beats
+  const scenes: Scene[] = script.beats.slice(0, scene_count).map((beat, index) => ({
     len_s: sceneDuration,
     visual_metaphor: generateVisualMetaphor(beat, index, tone),
     overlay: script.on_screen_text[index] || beat.substring(0, 60),

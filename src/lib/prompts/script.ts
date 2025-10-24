@@ -4,11 +4,13 @@ import type { StructuredBrief } from '../types/index.js';
 
 export const SCRIPT_SYSTEM_PROMPT = `You are an expert short-form video scriptwriter specializing in recruitment content for TikTok, Instagram Reels, and YouTube Shorts.
 
-STORYTELLING STRUCTURE (15-30 seconds):
-1. HOOK (0-3s): Grab attention with a question, bold claim, or surprising statement
-2. BUILD (3-15s): Develop the narrative with 2-3 beats showing what makes this role compelling
-3. PAYOFF (15-20s): Deliver the core message - why someone should apply
-4. CTA (20-24s): Clear call-to-action with next steps
+STORYTELLING STRUCTURE (7-21 seconds, scales with scene count):
+1. HOOK (always): Grab attention with a question, bold claim, or surprising statement
+2. BUILD (1-3 beats, variable): Develop the narrative showing what makes this role compelling
+   - 1 beat: Single core message (~7s total)
+   - 2 beats: Two-part story (~14s total)
+   - 3 beats: Full narrative arc (~21s total)
+3. CTA (always): Clear call-to-action with next steps
 
 KEY PRINCIPLES:
 - Use conversational, natural language (write how people actually talk)
@@ -27,23 +29,24 @@ ANTI-PATTERNS TO AVOID:
 OUTPUT FORMAT (JSON):
 {
   "hook": "Opening line that stops the scroll (question or bold statement)",
-  "beats": ["Build beat 1", "Build beat 2", "Build beat 3"],
-  "on_screen_text": ["Text for scene 1", "Text for scene 2", "Text for scene 3"],
+  "beats": ["Build beat 1", "Build beat 2", ...],  // Array length matches requested scene count (1-3)
+  "on_screen_text": ["Text for scene 1", "Text for scene 2", ...],  // Same length as beats
   "cta": "Clear call to action",
   "cta_url": "Application URL if provided",
   "tone": "Match requested tone",
   "estimated_duration_s": target duration
 }
 
-WORD COUNT: 70-90 spoken words total across all fields.
+WORD COUNT: Scales with scene count (30-40 words for 1 scene, 50-70 for 2 scenes, 70-90 for 3 scenes).
 INCLUSIVITY: Use gender-neutral language, avoid protected-class references.`;
 
 export function buildScriptPrompt(
   brief: StructuredBrief,
   tone: string,
-  duration_s: number
+  duration_s: number,
+  scene_count: number
 ): string {
-  return `Create a ${duration_s}-second recruitment video script for this role:
+  return `Create a ${duration_s}-second recruitment video script with ${scene_count} scene${scene_count > 1 ? 's' : ''} for this role:
 
 ROLE DETAILS:
 Title: ${brief.title}
@@ -67,6 +70,7 @@ ${brief.benefits.map(b => `- ${b}`).join('\n')}
 
 TONE: ${tone}
 DURATION: ${duration_s} seconds total
+SCENE COUNT: ${scene_count} (generate exactly ${scene_count} beat${scene_count > 1 ? 's' : ''} in the beats array)
 
 HOOK EXAMPLES (choose a pattern that fits):
 1. Question format: "What if [compelling scenario]?"
@@ -174,14 +178,20 @@ export function buildShotPlanPrompt(
   script: { hook: string; beats: string[]; tone: string },
   brief: StructuredBrief,
   duration_s: number,
-  tone: string
+  tone: string,
+  scene_count: number
 ): string {
   const styleGuide = getVisualStyleGuide(tone);
 
-  // Calculate per-scene duration (2 scenes since we skip scene0)
-  const sceneDuration = Math.floor(duration_s * (2 / 3) / 2);
+  // Calculate per-scene duration based on actual scene count
+  const sceneDuration = Math.floor(duration_s / scene_count);
 
-  return `Create a shot plan for a ${duration_s}-second recruitment video (2 scenes after skipping scene0).
+  // Build dynamic beat visualization
+  const beatsVisualization = script.beats.map((beat, index) =>
+    `Beat ${index + 1}: ${beat} (Scene ${index} - ${sceneDuration}s)`
+  ).join('\n');
+
+  return `Create a shot plan for a ${duration_s}-second recruitment video (${scene_count} scene${scene_count > 1 ? 's' : ''}).
 
 JOB CONTEXT:
 Role: ${brief.title}
@@ -190,8 +200,7 @@ Impact: ${brief.impact}
 
 SCRIPT TO VISUALIZE:
 Hook: ${script.hook}
-Beat 1: ${script.beats[1]} (Scene 1 - ${sceneDuration}s)
-Beat 2: ${script.beats[2]} (Scene 2 - ${sceneDuration}s)
+${beatsVisualization}
 
 VISUAL STYLE FOR ${tone.toUpperCase()} TONE:
 ${styleGuide}
@@ -199,7 +208,7 @@ ${styleGuide}
 ROLE-SPECIFIC VISUAL THINKING:
 ${getRoleSpecificVisuals(brief.title)}
 
-Create 2 cinematic scene descriptions that:
+Create ${scene_count} cinematic scene description${scene_count > 1 ? 's' : ''} that:
 1. Match the emotional tone and message of each beat
 2. Use the ${tone} visual style guide above
 3. Are specific enough for AI video generation

@@ -11,6 +11,20 @@ import type { VideoScript, BrandConfig } from '../lib/types/index.js';
 const execAsync = promisify(exec);
 const logger = createLogger('compositor');
 
+async function getVideoDuration(filePath: string): Promise<number> {
+  try {
+    const { stdout } = await execAsync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`
+    );
+    const duration = parseFloat(stdout.trim());
+    logger.debug('Got video duration', { filePath, duration });
+    return duration;
+  } catch (error) {
+    logger.error('Failed to get video duration', { filePath, error });
+    throw error;
+  }
+}
+
 export async function concatenateScenes(
   sceneFiles: string[],
   renderId: string
@@ -90,12 +104,44 @@ async function generateSubtitles(
 ): Promise<string> {
   const assPath = path.join(config.paths.tmp, `${renderId}_overlays.ass`);
 
-  // Using 2 Veo3-generated scenes, split duration evenly
-  const actualDuration = Math.floor(script.estimated_duration_s);
-  const segmentDuration = Math.floor(actualDuration / 2);
+  // Get scene count from script beats
+  const scene_count = script.beats.length;
 
-  // Generate ASS subtitle content for both scenes
-  // Scene 0 shows beats[1], Scene 1 shows beats[2] (matching shot plan)
+  // Read actual durations of normalized scene files
+  const sceneDurations: number[] = [];
+  for (let i = 0; i < scene_count; i++) {
+    const normalizedPath = path.join(config.paths.tmp, `${renderId}_scene${i}_norm.mp4`);
+    const duration = await getVideoDuration(normalizedPath);
+    sceneDurations.push(duration);
+  }
+
+  // Calculate cumulative timestamps
+  const timestamps: Array<{ start: number; end: number }> = [];
+  let cumulative = 0;
+  for (let i = 0; i < scene_count; i++) {
+    timestamps.push({
+      start: cumulative,
+      end: cumulative + sceneDurations[i],
+    });
+    cumulative += sceneDurations[i];
+  }
+
+  // Helper to format seconds as ASS timestamp (H:MM:SS.SS)
+  const formatTime = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = (seconds % 60).toFixed(2);
+    return `${h}:${m.toString().padStart(2, '0')}:${s.padStart(5, '0')}`;
+  };
+
+  // Generate dialogue lines for each scene
+  const dialogueLines = script.beats.map((beat, index) => {
+    const text = script.on_screen_text[index] || beat;
+    const start = formatTime(timestamps[index].start);
+    const end = formatTime(timestamps[index].end);
+    return `Dialogue: 0,${start},${end},LT,,0,0,0,,${text}`;
+  }).join('\n');
+
   const assContent = `[Script Info]
 PlayResX: 1080
 PlayResY: 1920
@@ -104,12 +150,16 @@ PlayResY: 1920
 Style: LT,Inter,42,&H00FFFFFF,&H00000000,&HAA000000,&HAA000000,0,0,0,0,100,100,0,0,3,2,2,2,10,10,20,1
 
 [Events]
-Dialogue: 0,0:00:00.00,0:00:0${segmentDuration}.00,LT,,0,0,0,,${script.on_screen_text[1] || script.beats[1]}
-Dialogue: 0,0:00:0${segmentDuration}.00,0:00:${actualDuration}.00,LT,,0,0,0,,${script.on_screen_text[2] || script.beats[2]}
+${dialogueLines}
 `;
 
   await writeFile(assPath, assContent);
-  logger.info('Subtitles generated', { renderId, assPath });
+  logger.info('Subtitles generated with actual timings', {
+    renderId,
+    assPath,
+    scene_count,
+    total_duration: cumulative,
+  });
 
   return assPath;
 }

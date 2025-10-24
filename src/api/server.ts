@@ -27,15 +27,24 @@ app.use((req, res, next) => {
 // POST /render - Create a new render job
 app.post('/render', async (req, res) => {
   try {
+    // Get and validate scene_count
+    const scene_count = req.body.scene_count || 1;
+    if (scene_count < 1 || scene_count > 3) {
+      return res.status(400).json({ error: 'scene_count must be between 1 and 3' });
+    }
+
+    // Calculate duration based on scene count (~7 seconds per Veo3 scene)
+    const duration_s = scene_count * 7;
+
     const request: RenderRequest = {
       job_id: req.body.job_id,
       company: req.body.company,
       job_description: req.body.job_description,
       brand: req.body.brand,
       locale: req.body.locale || 'en-US',
-      duration_s: req.body.duration_s || config.defaults.duration_s,
+      scene_count,
+      duration_s,
       engine: req.body.engine || 'veo3', // Default to Veo 3.1 (Google Gemini)
-      scenes: req.body.scenes || config.defaults.scenes,
     };
 
     // Validate required fields
