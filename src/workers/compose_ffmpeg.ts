@@ -20,19 +20,18 @@ export async function concatenateScenes(
   const outputPath = path.join(config.paths.tmp, `${renderId}_concat.mp4`);
 
   try {
-    // Skip scene0 - only use Veo3-generated scenes (scene1 and scene2)
-    const scenesToUse = sceneFiles.slice(1); // Skip first scene (scene0)
-    logger.info('Skipping scene0, using only Veo3 scenes', {
+    // Use all Veo3-generated scenes
+    const scenesToUse = sceneFiles;
+    logger.info('Concatenating all Veo3 scenes', {
       renderId,
-      originalCount: sceneFiles.length,
-      usedCount: scenesToUse.length
+      sceneCount: scenesToUse.length
     });
 
     // Normalize all scenes to same fps and resolution, PRESERVING AUDIO
     const normalizedFiles: string[] = [];
 
     for (let i = 0; i < scenesToUse.length; i++) {
-      const normalized = path.join(config.paths.tmp, `${renderId}_scene${i+1}_norm.mp4`);
+      const normalized = path.join(config.paths.tmp, `${renderId}_scene${i}_norm.mp4`);
       // IMPORTANT: Added -c:a aac to preserve audio from Veo3 videos
       const cmd = `ffmpeg -y -i "${scenesToUse[i]}" -r 30 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:v libx264 -c:a aac -b:a 192k -preset veryfast -crf 23 -pix_fmt yuv420p "${normalized}"`;
       await execAsync(cmd);
@@ -91,13 +90,12 @@ async function generateSubtitles(
 ): Promise<string> {
   const assPath = path.join(config.paths.tmp, `${renderId}_overlays.ass`);
 
-  // Since we're using only 2 scenes (skipping scene0), adjust timing
-  // We'll use a shorter estimated duration based on 2 scenes instead of 3
-  const actualDuration = Math.floor(script.estimated_duration_s * (2 / 3));
+  // Using 2 Veo3-generated scenes, split duration evenly
+  const actualDuration = Math.floor(script.estimated_duration_s);
   const segmentDuration = Math.floor(actualDuration / 2);
 
-  // Generate ASS subtitle content
-  // Skip scene0's text, show only scene1 and scene2 text
+  // Generate ASS subtitle content for both scenes
+  // Scene 0 shows beats[1], Scene 1 shows beats[2] (matching shot plan)
   const assContent = `[Script Info]
 PlayResX: 1080
 PlayResY: 1920
@@ -107,7 +105,7 @@ Style: LT,Inter,42,&H00FFFFFF,&H00000000,&HAA000000,&HAA000000,0,0,0,0,100,100,0
 
 [Events]
 Dialogue: 0,0:00:00.00,0:00:0${segmentDuration}.00,LT,,0,0,0,,${script.on_screen_text[1] || script.beats[1]}
-Dialogue: 0,0:00:0${segmentDuration}.00,0:00:${actualDuration}.00,LT,,0,0,0,,${script.on_screen_text[2] || script.cta}
+Dialogue: 0,0:00:0${segmentDuration}.00,0:00:${actualDuration}.00,LT,,0,0,0,,${script.on_screen_text[2] || script.beats[2]}
 `;
 
   await writeFile(assPath, assContent);
