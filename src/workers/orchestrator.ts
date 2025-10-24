@@ -6,7 +6,7 @@ import { config } from '../lib/config.js';
 import { createLogger } from '../lib/logger.js';
 import { getJob, updateJobStatus, saveJob } from '../lib/storage.js';
 import { parseJobDescription } from './parse_llm.js';
-import { generateScript, makeShotPlan } from './script_llm.js';
+import { generateScript, generateShotPlan } from './script_llm.js';
 import { generateScene } from './generators.js';
 import { concatenateScenes, addOverlays, appendEndCard } from './compose_ffmpeg.js';
 import { performQC } from '../lib/qc/index.js';
@@ -56,8 +56,9 @@ export async function processRenderJob(renderId: string): Promise<void> {
     );
     job.script = script;
 
-    const shotPlan = makeShotPlan(
+    const shotPlan = await generateShotPlan(
       script,
+      brief,
       job.request.duration_s || config.defaults.duration_s,
       job.request.brand.tone
     );

@@ -3,7 +3,7 @@
 import OpenAI from 'openai';
 import { config } from '../lib/config.js';
 import { createLogger } from '../lib/logger.js';
-import { SCRIPT_SYSTEM_PROMPT, buildScriptPrompt } from '../lib/prompts/script.js';
+import { SCRIPT_SYSTEM_PROMPT, buildScriptPrompt, SHOT_PLAN_SYSTEM_PROMPT, buildShotPlanPrompt } from '../lib/prompts/script.js';
 import type { StructuredBrief, VideoScript, ShotPlan, Scene } from '../lib/types/index.js';
 
 const logger = createLogger('script_llm');
@@ -23,12 +23,12 @@ export async function generateScript(
     logger.info('Generating video script', { tone, duration_s });
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         { role: 'system', content: SCRIPT_SYSTEM_PROMPT },
         { role: 'user', content: buildScriptPrompt(brief, tone, duration_s) },
       ],
-      temperature: 0.7,
+      temperature: 0.8,
       response_format: { type: 'json_object' },
     });
 
@@ -54,7 +54,51 @@ export async function generateScript(
   }
 }
 
-export function makeShotPlan(script: VideoScript, duration_s: number, tone: string): ShotPlan {
+export async function generateShotPlan(
+  script: VideoScript,
+  brief: StructuredBrief,
+  duration_s: number,
+  tone: string
+): Promise<ShotPlan> {
+  const startTime = Date.now();
+
+  try {
+    logger.info('Generating shot plan with LLM', { tone, duration_s });
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: SHOT_PLAN_SYSTEM_PROMPT },
+        { role: 'user', content: buildShotPlanPrompt(script, brief, duration_s, tone) },
+      ],
+      temperature: 0.85,
+      response_format: { type: 'json_object' },
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error('No content in LLM response');
+    }
+
+    const shotPlan: ShotPlan = JSON.parse(content);
+
+    // Validate required fields
+    if (!shotPlan.scenes || shotPlan.scenes.length !== 2) {
+      throw new Error('Invalid shot plan structure - expected 2 scenes');
+    }
+
+    const duration = Date.now() - startTime;
+    logger.info('Shot plan generated successfully', { duration_ms: duration });
+
+    return shotPlan;
+  } catch (error) {
+    logger.error('Failed to generate shot plan, falling back to hardcoded version', { error });
+    // Fallback to hardcoded shot plan on error
+    return makeShotPlanFallback(script, duration_s, tone);
+  }
+}
+
+export function makeShotPlanFallback(script: VideoScript, duration_s: number, tone: string): ShotPlan {
   logger.info('Creating shot plan', { duration_s, tone });
 
   const sceneDuration = Math.floor(duration_s / 3);
