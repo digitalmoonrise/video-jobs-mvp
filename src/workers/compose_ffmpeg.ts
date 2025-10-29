@@ -11,6 +11,19 @@ import type { VideoScript, BrandConfig } from '../lib/types/index.js';
 const execAsync = promisify(exec);
 const logger = createLogger('compositor');
 
+// Helper function to convert hex color to ASS color format
+function hexToAssColor(hex: string, alpha: string = 'AA'): string {
+  // Remove # if present
+  hex = hex.replace('#', '');
+  
+  // ASS format is &HAABBGGRR& (alpha, blue, green, red - reversed from hex RGB)
+  const r = hex.substring(0, 2);
+  const g = hex.substring(2, 4);
+  const b = hex.substring(4, 6);
+  
+  return `&H${alpha}${b}${g}${r}&`;
+}
+
 async function getVideoDuration(filePath: string): Promise<number> {
   try {
     const { stdout } = await execAsync(
@@ -86,7 +99,12 @@ export async function addOverlays(
 
     // Burn in subtitles (use absolute path)
     const absAssPath = path.resolve(assPath);
-    const cmd = `ffmpeg -y -i "${videoPath}" -vf "subtitles='${absAssPath}':force_style='Fontsize=42,BorderStyle=3,Outline=2,Shadow=0,PrimaryColour=&HFFFFFF&,BackColour=&H55000000&'" -c:a copy "${outputPath}"`;
+    
+    // Convert brand color to ASS format for background
+    const brandBackColor = hexToAssColor(brand.primary_hex, 'DD'); // DD = ~85% opacity
+    
+    // TikTok-style overlay: Large bold text, top-center positioning, brand color background
+    const cmd = `ffmpeg -y -i "${videoPath}" -vf "subtitles='${absAssPath}':force_style='Fontsize=100,Bold=-1,BorderStyle=4,Outline=7,Shadow=2,Alignment=8,MarginV=250,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BackColour=${brandBackColor}'" -c:a copy "${outputPath}"`;
 
     await execAsync(cmd);
 
@@ -146,12 +164,19 @@ async function generateSubtitles(
     return `Dialogue: 0,${start},${end},LT,,0,0,0,,${overlayText}`;
   }).join('\n');
 
+  // Convert brand color to ASS format
+  const brandBackColor = hexToAssColor(brand.primary_hex, 'DD');
+
+  // TikTok-style ASS subtitle format:
+  // Style format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, 
+  //               Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, 
+  //               BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
   const assContent = `[Script Info]
 PlayResX: 1080
 PlayResY: 1920
 
 [V4+ Styles]
-Style: LT,Inter,42,&H00FFFFFF,&H00000000,&HAA000000,&HAA000000,0,0,0,0,100,100,0,0,3,2,2,2,10,10,20,1
+Style: LT,Inter,100,&H00FFFFFF,&H000000FF,&H00000000,${brandBackColor},-1,0,0,0,100,100,0,0,4,7,2,8,40,40,250,1
 
 [Events]
 ${dialogueLines}
