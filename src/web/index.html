@@ -378,6 +378,13 @@
         </select>
       </div>
 
+      <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+        <input type="checkbox" id="overlayOnly" style="width: auto; margin: 0;">
+        <label for="overlayOnly" style="margin: 0; font-weight: normal; cursor: pointer;">
+          <strong>Overlay Only Mode (Testing)</strong> - Uses existing videos from tmp directory. No Veo API calls.
+        </label>
+      </div>
+
       <button type="submit" id="submitBtn">Generate Video</button>
     </form>
 
@@ -392,19 +399,29 @@
         </div>
       </div>
 
-      <div id="scriptStep" class="pipeline-step">
+      <div id="salesPitchStep" class="pipeline-step">
         <h3>
           <span class="step-badge">2</span>
+          Sales Pitch: Compelling Job Advertisement
+        </h3>
+        <div class="step-content" id="salesPitchContent">
+          Waiting for parser...
+        </div>
+      </div>
+
+      <div id="scriptStep" class="pipeline-step">
+        <h3>
+          <span class="step-badge">3</span>
           Script Writer: Video Script Generation
         </h3>
         <div class="step-content" id="scriptContent">
-          Waiting for parser...
+          Waiting for sales pitch...
         </div>
       </div>
 
       <div id="shotPlanStep" class="pipeline-step">
         <h3>
-          <span class="step-badge">3</span>
+          <span class="step-badge">4</span>
           Shot Planning: Visual Metaphors
         </h3>
         <div class="step-content" id="shotPlanContent">
@@ -442,10 +459,12 @@
       const pipelineResults = document.getElementById('pipelineResults');
       pipelineResults.className = 'pipeline-results show';
       document.getElementById('parserStep').className = 'pipeline-step active';
+      document.getElementById('salesPitchStep').className = 'pipeline-step';
       document.getElementById('scriptStep').className = 'pipeline-step';
       document.getElementById('shotPlanStep').className = 'pipeline-step';
       document.getElementById('parserContent').innerHTML = 'Processing...';
-      document.getElementById('scriptContent').innerHTML = 'Waiting for parser...';
+      document.getElementById('salesPitchContent').innerHTML = 'Waiting for parser...';
+      document.getElementById('scriptContent').innerHTML = 'Waiting for sales pitch...';
       document.getElementById('shotPlanContent').innerHTML = 'Waiting for script...';
 
       try {
@@ -460,6 +479,7 @@
           },
           scene_count: parseInt(document.getElementById('sceneCount').value),
           engine: document.getElementById('engine').value,
+          overlay_only: document.getElementById('overlayOnly').checked,
         };
 
         const response = await fetch(`${API_BASE}/render`, {
@@ -506,6 +526,15 @@
             <div class="brief-value">${item.value}</div>
           </div>`;
         }
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function renderSalesPitch(salesPitch) {
+      let html = '<div class="beats">';
+      salesPitch.forEach((segment, i) => {
+        html += `<div class="beat"><strong>Segment ${i + 1}:</strong> ${segment}</div>`;
       });
       html += '</div>';
       return html;
@@ -558,6 +587,11 @@
           if (data.brief) {
             document.getElementById('parserStep').className = 'pipeline-step completed';
             document.getElementById('parserContent').innerHTML = renderBrief(data.brief);
+          }
+
+          if (data.sales_pitch) {
+            document.getElementById('salesPitchStep').className = 'pipeline-step completed';
+            document.getElementById('salesPitchContent').innerHTML = renderSalesPitch(data.sales_pitch);
           }
 
           if (data.script) {

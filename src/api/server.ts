@@ -45,6 +45,7 @@ app.post('/render', async (req, res) => {
       scene_count,
       duration_s,
       engine: req.body.engine || 'veo3', // Default to Veo 3.1 (Google Gemini)
+      overlay_only: req.body.overlay_only || false,
     };
 
     // Validate required fields
@@ -105,6 +106,7 @@ app.get('/render/:id', (req, res) => {
       brief: job.brief,
       script: job.script,
       shot_plan: job.shot_plan,
+      sales_pitch: job.sales_pitch,
       debug: {
         cost_cents: job.debug.cost_cents,
         latency_s: job.debug.latency_s,

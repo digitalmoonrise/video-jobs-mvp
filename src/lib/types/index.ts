@@ -13,6 +13,8 @@ export interface RenderRequest {
   engine?: 'sora2' | 'veo3' | 'template';
   /** @deprecated Use scene_count instead. Kept for backwards compatibility. */
   scenes?: number;
+  /** Testing mode: Use existing videos from tmp directory instead of generating new ones. No Veo API calls. */
+  overlay_only?: boolean;
 }
 
 export interface BrandConfig {
@@ -38,6 +40,7 @@ export interface RenderStatusResponse {
   brief?: StructuredBrief;
   script?: VideoScript;
   shot_plan?: ShotPlan;
+  sales_pitch?: string[];
   debug?: {
     cost_cents?: number;
     latency_s?: number;
@@ -90,6 +93,7 @@ export interface RenderJob {
   brief?: StructuredBrief;
   script?: VideoScript;
   shot_plan?: ShotPlan;
+  sales_pitch?: string[];
   scene_files?: string[];
   final_video?: string;
   error?: string;

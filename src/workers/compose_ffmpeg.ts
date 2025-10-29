@@ -73,15 +73,16 @@ export async function addOverlays(
   videoPath: string,
   script: VideoScript,
   brand: BrandConfig,
-  renderId: string
+  renderId: string,
+  salesPitchSegments?: string[]
 ): Promise<string> {
-  logger.info('Adding overlays', { renderId });
+  logger.info('Adding overlays', { renderId, usingSalesPitch: !!salesPitchSegments });
 
   const outputPath = path.join(config.paths.tmp, `${renderId}_overlays.mp4`);
 
   try {
     // Generate ASS subtitle file for overlays
-    const assPath = await generateSubtitles(script, brand, renderId);
+    const assPath = await generateSubtitles(script, brand, renderId, salesPitchSegments);
 
     // Burn in subtitles (use absolute path)
     const absAssPath = path.resolve(assPath);
@@ -100,12 +101,13 @@ export async function addOverlays(
 async function generateSubtitles(
   script: VideoScript,
   brand: BrandConfig,
-  renderId: string
+  renderId: string,
+  salesPitchSegments?: string[]
 ): Promise<string> {
   const assPath = path.join(config.paths.tmp, `${renderId}_overlays.ass`);
 
-  // Get scene count from script beats
-  const scene_count = script.beats.length;
+  // Get scene count from script beats or sales pitch segments
+  const scene_count = salesPitchSegments ? salesPitchSegments.length : script.beats.length;
 
   // Read actual durations of normalized scene files
   const sceneDurations: number[] = [];
@@ -135,11 +137,13 @@ async function generateSubtitles(
   };
 
   // Generate dialogue lines for each scene
-  const dialogueLines = script.beats.map((beat, index) => {
-    const text = script.on_screen_text[index] || beat;
+  // Use sales pitch segments if provided, otherwise use beat-based overlays
+  const dialogueLines = (salesPitchSegments || script.beats).map((text, index) => {
+    // If using sales pitch, use it directly; otherwise use on_screen_text or beat
+    const overlayText = salesPitchSegments ? text : (script.on_screen_text[index] || text);
     const start = formatTime(timestamps[index].start);
     const end = formatTime(timestamps[index].end);
-    return `Dialogue: 0,${start},${end},LT,,0,0,0,,${text}`;
+    return `Dialogue: 0,${start},${end},LT,,0,0,0,,${overlayText}`;
   }).join('\n');
 
   const assContent = `[Script Info]
